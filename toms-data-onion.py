@@ -90,3 +90,32 @@ with open("layer-3.txt", "wb") as o:
         for offset in range(len(chunk)):
             result |= (chunk[offset] >> 1) << (7 * (7 - offset))
         o.write(result.to_bytes(7, byteorder="big"))
+
+## Layer 3/6: XOR Encryption
+
+layer3 = get_payload("layer-3.txt")
+decoded = base64.a85decode(layer3.encode("utf-8"), adobe=True)
+
+known_start = b"==[ Layer 4/6: "
+known_text = b"==[ Payload ]==============================================="
+
+# We know the output prefix ∴ we know the key prefix…
+key = bytearray(d ^ p for (d, p) in zip(decoded, known_start))
+key.extend(bytearray(32 - len(known_start)))
+
+for i in range(64, len(decoded) - 32, 32):
+    # Based on partial key, partially decrypt…
+    partial = bytearray(decoded[i + j] ^ key[j] for j in range(len(known_start)))
+
+    if (index := known_text.find(partial)) == -1:
+        continue
+
+    # Success! Determine the whole key…
+    key = bytearray(decoded[i + k] ^ known_text[index + k] for k in range(32))
+    break
+
+# Cycle the key across the whole input…
+cycled_key = key * ((len(decoded) // 32) + 1)
+
+with open("layer-4.txt", "wb") as o:
+    o.write(bytearray(c ^ k for (c, k) in zip(decoded, cycled_key)))
